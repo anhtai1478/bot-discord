@@ -264,6 +264,14 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+if (process.env.YOUTUBE_COOKIE) {
+    play.setToken({
+        youtube: {
+            cookie: process.env.YOUTUBE_COOKIE
+        }
+    });
+}
+
 if (!process.env.DISCORD_TOKEN) {
     throw new Error('Thiếu DISCORD_TOKEN trong file .env');
 }
