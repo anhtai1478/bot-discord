@@ -126,12 +126,10 @@ async function playNext(queue) {
         let resource;
 
         if (item.url.includes('soundcloud.com')) {
-            const source = await play.stream(item.url, { quality: 0 });
-            resource = createAudioResource(source.stream, {
-                inputType: source.type === 'opus' ? StreamType.Opus : StreamType.Arbitrary,
-                inlineVolume: true,
-            });
-        } else {
+            throw new Error('SoundCloud đang bị chặn trên bot này vì thiếu authorization. Vui lòng dùng YouTube hoặc link direct hợp lệ khác.');
+        }
+
+        {
             const options = {
                 filter: 'audioonly',
                 highWaterMark: 1 << 25,
@@ -252,7 +250,11 @@ client.on('messageCreate', async (message) => {
         } else if (command === 'b!p' || command === 'b!play') {
             const normalizedUrl = argument && normalizeUrl(argument);
             if (!normalizedUrl || !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//i.test(normalizedUrl)) {
-                await message.reply('Dùng: `b!p <link YouTube hoặc SoundCloud>`');
+                await message.reply('Dùng: `b!p <link YouTube>`');
+                return;
+            }
+            if (normalizedUrl.includes('soundcloud.com')) {
+                await message.reply('SoundCloud hiện đang không hỗ trợ trên bot này vì thiếu authorization. Hãy dùng link YouTube.');
                 return;
             }
             await connectAndPlay(message, normalizedUrl);
