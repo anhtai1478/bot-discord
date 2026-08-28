@@ -115,8 +115,12 @@ async function playNext(queue) {
         console.log('Đang lấy stream qua play-dl...');
         console.log('URL:', item.url);
 
+        // Truyền trực tiếp Cookie Header vào đây
         const stream = await play.stream(item.url, {
-            discordPlayerCompatibility: true
+            discordPlayerCompatibility: true,
+            hts: {
+                cookie: process.env.YOUTUBE_COOKIE || ''
+            }
         });
 
         const resource = createAudioResource(stream.stream, {
