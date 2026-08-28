@@ -1,14 +1,22 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
-// Tạo một Web Server giả lập đơn giản để Render không kill ứng dụng
+// 1. HTTP Server giả lập giúp Render giữ service luôn Active
 const http = require('http');
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Bot Discord đang chạy trực tuyến!');
 });
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server HTTP đang lắng nghe tại port ${PORT}`));
+server.listen(PORT, () => console.log(`[HTTP] Server đang lắng nghe tại port ${PORT}`));
+
+// Bắt lỗi toàn cục tránh crash bot
+process.on('unhandledRejection', (error) => {
+    console.error('Unhandled Promise Rejection:', error);
+});
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+});
 
 const {
     Client,
@@ -101,11 +109,18 @@ async function playNext(queue) {
         console.log('Đang lấy stream...');
         console.log('URL:', item.url);
 
+        // Tối ưu cờ yt-dlp để vượt qua kiểm tra IP trên server
         const stream = ytdlp.exec(item.url, {
             output: '-',
             format: 'bestaudio[ext=webm]/bestaudio',
             noPlaylist: true,
             quiet: true,
+            noWarnings: true,
+            geoBypass: true,
+            addHeader: [
+                'referer:youtube.com',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            ]
         }, { stdio: ['ignore', 'pipe', 'pipe'] });
         
         stream.stderr.on('data', (data) => console.error(`yt-dlp: ${data}`));
@@ -122,22 +137,16 @@ async function playNext(queue) {
 
         queue.player.play(resource);
 
-        await item.channel.send(
-            `🎵 Đang phát: **${item.url}**`
-        );
+        await item.channel.send(`🎵 Đang phát: **${item.url}**`);
 
     } catch (error) {
         console.error('=================================');
         console.error('❌ LỖI PHÁT NHẠC');
         console.error('Message:', error.message);
-        console.error('Name:', error.name);
         console.error('Stack:', error.stack);
-        console.error('URL:', item.url);
         console.error('=================================');
 
-        await item.channel.send(
-            `❌ Không thể phát link này.\n\`\`\`\n${error.message}\n\`\`\``
-        );
+        await item.channel.send(`❌ Không thể phát link này.\n\`\`\`\n${error.message}\n\`\`\``);
 
         queue.current = null;
         await playNext(queue);
@@ -217,7 +226,6 @@ async function joinVoiceRoom(message) {
     await message.reply(`Bot đã vào phòng **${voiceChannel.name}** và sẽ ở lại.`);
 }
 
-// Sửa 'clientReady' thành 'ready'
 client.once('ready', (readyClient) => {
     console.log(`Đã đăng nhập thành công với tên: ${readyClient.user.tag}`);
 });
