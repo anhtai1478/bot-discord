@@ -24,6 +24,7 @@ const {
 const {
     AudioPlayerStatus,
     NoSubscriberBehavior,
+    StreamType,
     createAudioPlayer,
     createAudioResource,
     joinVoiceChannel,
@@ -31,6 +32,7 @@ const {
     VoiceConnectionStatus,
 } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
+const play = require('play-dl');
 
 // Cấu hình Agent nhận Cookie JSON từ Render
 let agent;
@@ -118,24 +120,33 @@ async function playNext(queue) {
 
     try {
         console.log('=================================');
-        console.log('Đang lấy stream qua ytdl-core...');
+        console.log('Đang lấy stream...');
         console.log('URL:', item.url);
 
-        const options = {
-            filter: 'audioonly',
-            highWaterMark: 1 << 25,
-            quality: 'highestaudio',
-        };
+        let resource;
 
-        if (agent) {
-            options.agent = agent;
+        if (item.url.includes('soundcloud.com')) {
+            const source = await play.stream(item.url, { quality: 0 });
+            resource = createAudioResource(source.stream, {
+                inputType: source.type === 'opus' ? StreamType.Opus : StreamType.Arbitrary,
+                inlineVolume: true,
+            });
+        } else {
+            const options = {
+                filter: 'audioonly',
+                highWaterMark: 1 << 25,
+                quality: 'highestaudio',
+            };
+
+            if (agent) {
+                options.agent = agent;
+            }
+
+            const stream = ytdl(item.url, options);
+            resource = createAudioResource(stream, {
+                inlineVolume: true,
+            });
         }
-
-        const stream = ytdl(item.url, options);
-
-        const resource = createAudioResource(stream, {
-            inlineVolume: true,
-        });
 
         resource.volume.setVolume(0.5);
         queue.player.play(resource);
