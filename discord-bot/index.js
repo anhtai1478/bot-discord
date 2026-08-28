@@ -16,7 +16,7 @@ const {
 	entersState,
 	VoiceConnectionStatus,
 } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
+const ytdlp = require('youtube-dl-exec');
 
 const PREFIX = 'b!';
 const queues = new Map();
@@ -78,17 +78,18 @@ async function playNext(queue) {
 		console.log('Đang lấy stream...');
 		console.log('URL:', item.url);
 
-		const info = await ytdl.getInfo(item.url);
-		const stream = ytdl.downloadFromInfo(info, {
-			quality: 'highestaudio',
-			filter: 'audioonly',
-			highWaterMark: 1 << 25,
-		});
+		const stream = ytdlp.exec(item.url, {
+			output: '-',
+			format: 'bestaudio[ext=webm]/bestaudio',
+			noPlaylist: true,
+			quiet: true,
+		}, { stdio: ['ignore', 'pipe', 'pipe'] });
+		stream.stderr.on('data', (data) => console.error(`yt-dlp: ${data}`));
 		stream.on('error', (error) => queue.player.emit('error', error));
 
 		console.log('Lấy stream thành công!');
 
-		const resource = createAudioResource(stream, {
+		const resource = createAudioResource(stream.stdout, {
 			inputType: StreamType.Arbitrary,
 			inlineVolume: true,
 		});
@@ -98,7 +99,7 @@ async function playNext(queue) {
 		queue.player.play(resource);
 
 		await item.channel.send(
-			`🎵 Đang phát: **${info.videoDetails.title}**`
+			`🎵 Đang phát: **${item.url}**`
 		);
 
 	} catch (error) {
