@@ -30,32 +30,15 @@ const {
     entersState,
     VoiceConnectionStatus,
 } = require('@discordjs/voice');
-const play = require('play-dl');
-
-// Thiết lập Cookie cho play-dl đúng cách
-(async () => {
-    try {
-        if (process.env.YOUTUBE_COOKIE) {
-            await play.setToken({
-                youtube: {
-                    cookie: process.env.YOUTUBE_COOKIE.trim()
-                }
-            });
-            console.log('[play-dl] Đã nạp YOUTUBE_COOKIE thành công.');
-        }
-    } catch (err) {
-        console.error('[play-dl] Lỗi cấu hình Token/Cookie:', err.message);
-    }
-})();
+const ytdl = require('@distube/ytdl-core');
 
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
 const queues = new Map();
 
 function normalizeUrl(value) {
-    if (!value) return null;
     try {
-        const url = new URL(value.trim());
+        const url = new URL(value);
         if (url.hostname === 'youtu.be') {
             return `https://www.youtube.com/watch?v=${url.pathname.slice(1)}`;
         }
@@ -120,24 +103,16 @@ async function playNext(queue) {
 
     try {
         console.log('=================================');
-        console.log('Đang lấy stream qua play-dl...');
+        console.log('Đang lấy stream qua ytdl-core...');
         console.log('URL:', item.url);
 
-        // Kiểm tra loại URL trước khi stream
-        const urlType = await play.validate(item.url);
-        console.log('Loại URL phát hiện được:', urlType);
-
-        if (!urlType || urlType === 'search') {
-            throw new Error(`URL không hợp lệ hoặc không hỗ trợ: ${item.url}`);
-        }
-
-        // Tạo Stream chuẩn từ play-dl
-        const stream = await play.stream(item.url, {
-            discordPlayerCompatibility: true
+        const stream = ytdl(item.url, {
+            filter: 'audioonly',
+            highWaterMark: 1 << 25,
+            quality: 'highestaudio',
         });
 
-        const resource = createAudioResource(stream.stream, {
-            inputType: stream.type,
+        const resource = createAudioResource(stream, {
             inlineVolume: true,
         });
 
@@ -238,33 +213,30 @@ client.once('clientReady', (readyClient) => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild || !message.content.startsWith(PREFIX)) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
-    const command = args.shift()?.toLowerCase();
-    const rawUrl = args[0];
-
+    const [command, argument] = message.content.trim().split(/\s+/);
     try {
-        if (command === 'zoo') {
+        if (command === 'b!zoo') {
             await joinVoiceRoom(message);
-        } else if (command === 'p' || command === 'play') {
-            const normalizedUrl = normalizeUrl(rawUrl);
+        } else if (command === 'b!p' || command === 'b!play') {
+            const normalizedUrl = argument && normalizeUrl(argument);
             if (!normalizedUrl || !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(normalizedUrl)) {
                 await message.reply('Dùng: `b!p <link YouTube>`');
                 return;
             }
             await connectAndPlay(message, normalizedUrl);
-        } else if (command === 'skip') {
+        } else if (command === 'b!skip') {
             const queue = queues.get(message.guildId);
             if (!queue?.current) return message.reply('Hiện không có bài nào đang phát.');
             queue.player.stop();
             await message.reply('Đã chuyển bài.');
-        } else if (command === 'stop') {
+        } else if (command === 'b!stop') {
             const queue = queues.get(message.guildId);
             if (!queue) return message.reply('Bot chưa ở trong kênh thoại.');
             queue.items.length = 0;
             queue.current = null;
             queue.player.stop();
             await message.reply('Đã dừng nhạc. Bot vẫn ở trong phòng.');
-        } else if (command === 'leave') {
+        } else if (command === 'b!leave') {
             const queue = queues.get(message.guildId);
             if (!queue) return message.reply('Bot chưa ở trong kênh thoại.');
             if (queue.idleTimer) clearTimeout(queue.idleTimer);
@@ -275,7 +247,7 @@ client.on('messageCreate', async (message) => {
             queue.connection?.destroy();
             queue.connection = null;
             await message.reply('Đã dừng nhạc và rời kênh thoại.');
-        } else if (command === 'queue') {
+        } else if (command === 'b!queue') {
             const queue = queues.get(message.guildId);
             if (!queue?.current && !queue?.items.length) return message.reply('Hàng đợi đang trống.');
             const list = queue.items.map((item, index) => `${index + 1}. ${item.url}`).join('\n');
