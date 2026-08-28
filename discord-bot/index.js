@@ -32,14 +32,15 @@ const {
 } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
 
-// Cấu hình Agent nhận Cookie từ Render (nếu có)
+// Cấu hình Agent nhận Cookie JSON từ Render
 let agent;
 if (process.env.YOUTUBE_COOKIE) {
     try {
-        agent = ytdl.createAgent(JSON.parse(process.env.YOUTUBE_COOKIE));
+        const cookies = JSON.parse(process.env.YOUTUBE_COOKIE);
+        agent = ytdl.createAgent(cookies);
+        console.log('[ytdl-core] Đã khởi tạo agent thành công từ Cookie JSON.');
     } catch {
-        // Trường hợp cookie ở dạng chuỗi raw
-        agent = ytdl.createAgent([{ name: 'cookie', value: process.env.YOUTUBE_COOKIE }]);
+        console.warn('[ytdl-core] YOUTUBE_COOKIE chưa đúng định dạng JSON Array.');
     }
 }
 
