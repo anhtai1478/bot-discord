@@ -1,7 +1,6 @@
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 process.env.FFMPEG_PATH = require('ffmpeg-static');
 
-// 1. HTTP Server giả lập giúp Render giữ service luôn Active
 const http = require('http');
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -10,7 +9,6 @@ const server = http.createServer((req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`[HTTP] Server đang lắng nghe tại port ${PORT}`));
 
-// Bắt lỗi toàn cục tránh crash bot
 process.on('unhandledRejection', (error) => {
     console.error('Unhandled Promise Rejection:', error);
 });
@@ -27,6 +25,7 @@ const {
     AudioPlayerStatus,
     NoSubscriberBehavior,
     StreamType,
+    createAudioPlayer,
     createAudioResource,
     joinVoiceChannel,
     entersState,
@@ -108,7 +107,6 @@ async function playNext(queue) {
         console.log('Đang lấy stream...');
         console.log('URL:', item.url);
 
-        // Lấy stream trực tiếp từ ytdl-core
         const stream = ytdl(item.url, {
             filter: 'audioonly',
             highWaterMark: 1 << 25,
@@ -116,27 +114,21 @@ async function playNext(queue) {
             quality: 'highestaudio',
         });
 
-        stream.on('error', (error) => queue.player.emit('error', error));
+        stream.on('error', (error) => console.error('ytdl stream error:', error));
 
-        console.log('Lấy stream thành công!');
-
-        // Truyền thẳng biến stream vào createAudioResource
         const resource = createAudioResource(stream, {
             inputType: StreamType.Arbitrary,
             inlineVolume: true,
         });
 
         resource.volume.setVolume(0.5);
-
         queue.player.play(resource);
 
         await item.channel.send(`🎵 Đang phát: **${item.url}**`);
 
     } catch (error) {
         console.error('=================================');
-        console.error('❌ LỖI PHÁT NHẠC');
-        console.error('Message:', error.message);
-        console.error('Stack:', error.stack);
+        console.error('❌ LỖI PHÁT NHẠC:', error);
         console.error('=================================');
 
         await item.channel.send(`❌ Không thể phát link này.\n\`\`\`\n${error.message}\n\`\`\``);
@@ -276,4 +268,4 @@ if (!process.env.DISCORD_TOKEN) {
     throw new Error('Thiếu DISCORD_TOKEN trong file .env');
 }
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);        
