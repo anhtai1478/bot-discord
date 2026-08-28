@@ -24,14 +24,22 @@ const {
 const {
     AudioPlayerStatus,
     NoSubscriberBehavior,
-    StreamType,
     createAudioPlayer,
     createAudioResource,
     joinVoiceChannel,
     entersState,
     VoiceConnectionStatus,
 } = require('@discordjs/voice');
-const ytdl = require('@distube/ytdl-core');
+const play = require('play-dl');
+
+// Cấu hình cookie cho play-dl từ biến môi trường YOUTUBE_COOKIE
+if (process.env.YOUTUBE_COOKIE) {
+    play.setToken({
+        youtube: {
+            cookie: process.env.YOUTUBE_COOKIE
+        }
+    });
+}
 
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
@@ -104,20 +112,15 @@ async function playNext(queue) {
 
     try {
         console.log('=================================');
-        console.log('Đang lấy stream...');
+        console.log('Đang lấy stream qua play-dl...');
         console.log('URL:', item.url);
 
-        const stream = ytdl(item.url, {
-            filter: 'audioonly',
-            highWaterMark: 1 << 25,
-            dlChunkSize: 0,
-            quality: 'highestaudio',
+        const stream = await play.stream(item.url, {
+            discordPlayerCompatibility: true
         });
 
-        stream.on('error', (error) => console.error('ytdl stream error:', error));
-
-        const resource = createAudioResource(stream, {
-            inputType: StreamType.Arbitrary,
+        const resource = createAudioResource(stream.stream, {
+            inputType: stream.type,
             inlineVolume: true,
         });
 
@@ -264,16 +267,8 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-if (process.env.YOUTUBE_COOKIE) {
-    play.setToken({
-        youtube: {
-            cookie: process.env.YOUTUBE_COOKIE
-        }
-    });
-}
-
 if (!process.env.DISCORD_TOKEN) {
     throw new Error('Thiếu DISCORD_TOKEN trong file .env');
 }
 
-client.login(process.env.DISCORD_TOKEN);        
+client.login(process.env.DISCORD_TOKEN);
