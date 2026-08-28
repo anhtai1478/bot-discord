@@ -32,6 +32,17 @@ const {
 } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
 
+// Cấu hình Agent nhận Cookie từ Render (nếu có)
+let agent;
+if (process.env.YOUTUBE_COOKIE) {
+    try {
+        agent = ytdl.createAgent(JSON.parse(process.env.YOUTUBE_COOKIE));
+    } catch {
+        // Trường hợp cookie ở dạng chuỗi raw
+        agent = ytdl.createAgent([{ name: 'cookie', value: process.env.YOUTUBE_COOKIE }]);
+    }
+}
+
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
 const queues = new Map();
@@ -106,11 +117,17 @@ async function playNext(queue) {
         console.log('Đang lấy stream qua ytdl-core...');
         console.log('URL:', item.url);
 
-        const stream = ytdl(item.url, {
+        const options = {
             filter: 'audioonly',
             highWaterMark: 1 << 25,
             quality: 'highestaudio',
-        });
+        };
+
+        if (agent) {
+            options.agent = agent;
+        }
+
+        const stream = ytdl(item.url, options);
 
         const resource = createAudioResource(stream, {
             inlineVolume: true,
