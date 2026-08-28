@@ -58,6 +58,9 @@ function normalizeUrl(value) {
             const videoId = url.searchParams.get('v') || url.pathname.match(/^\/(?:shorts\/|embed\/)?([^/?]+)/)?.[1];
             if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
         }
+        if (url.hostname.endsWith('soundcloud.com')) {
+            return value;
+        }
         return value;
     } catch {
         return value;
@@ -237,8 +240,8 @@ client.on('messageCreate', async (message) => {
             await joinVoiceRoom(message);
         } else if (command === 'b!p' || command === 'b!play') {
             const normalizedUrl = argument && normalizeUrl(argument);
-            if (!normalizedUrl || !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(normalizedUrl)) {
-                await message.reply('Dùng: `b!p <link YouTube>`');
+            if (!normalizedUrl || !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|soundcloud\.com)\//i.test(normalizedUrl)) {
+                await message.reply('Dùng: `b!p <link YouTube hoặc SoundCloud>`');
                 return;
             }
             await connectAndPlay(message, normalizedUrl);
