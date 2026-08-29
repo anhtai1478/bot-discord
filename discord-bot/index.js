@@ -5,15 +5,29 @@ const http = require('http');
 const { Readable } = require('stream');
 const googleTTS = require('google-tts-api');
 
-const httpServer = http.createServer((req, res) => {
-	res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-	res.end('Bot Discord online 24/7.');
-});
+function startHttpServer(port) {
+	const httpServer = http.createServer((req, res) => {
+		res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+		res.end('Bot Discord online 24/7.');
+	});
 
-const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-	console.log(`[HTTP] Bot đang nghe trên cổng ${PORT}`);
-});
+	httpServer.on('error', (error) => {
+		if (error.code === 'EADDRINUSE') {
+			const nextPort = port + 1;
+			console.warn(`[HTTP] Cổng ${port} đang bận, đang thử cổng ${nextPort}...`);
+			startHttpServer(nextPort);
+			return;
+		}
+		throw error;
+	});
+
+	httpServer.listen(port, () => {
+		console.log(`[HTTP] Bot đang nghe trên cổng ${port}`);
+	});
+}
+
+const PORT = Number(process.env.PORT) || 3000;
+startHttpServer(PORT);
 
 process.on('unhandledRejection', (error) => {
 	console.error('Unhandled Promise Rejection:', error);
