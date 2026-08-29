@@ -39,6 +39,9 @@ const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
 const queues = new Map();
 
+// Bot phải ở lại trong room cho đến khi người dùng chủ động ra lệnh rời.
+// Do đó, không dùng logic tự động ngắt kết nối theo thời gian rảnh nữa.
+
 function normalizeUrl(value) {
 	try {
 		const url = new URL(value);
@@ -69,7 +72,7 @@ function getQueue(guildId) {
 		const player = createAudioPlayer({
 			behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
 		});
-		const queue = { guildId, player, items: [], connection: null, current: null, idleTimer: null };
+		const queue = { guildId, player, items: [], connection: null, current: null, idleTimer: null, stayInChannel: true };
 
 		player.on(AudioPlayerStatus.Idle, () => playNext(queue));
 		player.on('error', (error) => {
@@ -82,15 +85,12 @@ function getQueue(guildId) {
 }
 
 function scheduleIdleDisconnect(queue) {
-	if (queue.idleTimer) clearTimeout(queue.idleTimer);
-	queue.idleTimer = setTimeout(() => {
-		if (!queue.current && queue.items.length === 0 && queue.connection) {
-			queue.connection.destroy();
-			queue.connection = null;
-			console.log(`[${queue.guildId}] Đã rời phòng sau 24 giờ không có nhạc.`);
-		}
-		queue.idleTimer = null;
-	}, IDLE_TIMEOUT);
+	// Tắt hoàn toàn tự động rời kênh: bot chỉ rời khi có lệnh b!leave hoặc boot lại.
+	if (queue.idleTimer) {
+		clearTimeout(queue.idleTimer);
+	}
+	queue.idleTimer = null;
+	return;
 }
 
 async function playNext(queue) {
