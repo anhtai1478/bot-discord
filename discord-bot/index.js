@@ -39,10 +39,6 @@ const scdl = require('soundcloud-downloader').default;
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
 const queues = new Map();
-const ALLOWED_SOUNDCLOUD_USERS = (process.env.ALLOWED_SOUNDCLOUD_USERS || 'your_soundcloud_username')
-	.split(',')
-	.map((value) => value.trim().toLowerCase())
-	.filter(Boolean);
 
 // Bot phải ở lại trong room cho đến khi người dùng chủ động ra lệnh rời.
 // Do đó, không dùng logic tự động ngắt kết nối theo thời gian rảnh nữa.
@@ -59,31 +55,13 @@ function normalizeUrl(value) {
 	}
 }
 
-function getSoundCloudUsernameFromUrl(value) {
-	try {
-		const url = new URL(value);
-		const host = url.hostname.toLowerCase();
-		if (!(host === 'soundcloud.com' || host === 'm.soundcloud.com' || host.endsWith('.soundcloud.com'))) {
-			return null;
-		}
-		const parts = url.pathname.split('/').filter(Boolean);
-		return parts[0]?.toLowerCase() || null;
-	} catch {
-		return null;
-	}
-}
-
 function isSupportedMusicUrl(value) {
 	if (!value) return false;
-	const url = normalizeUrl(value);
 	try {
-		const parsed = new URL(url);
-		const isSoundCloud = parsed.hostname === 'soundcloud.com' || parsed.hostname === 'm.soundcloud.com' || parsed.hostname.endsWith('.soundcloud.com');
-		if (!isSoundCloud) return false;
-		const username = getSoundCloudUsernameFromUrl(parsed.toString());
-		return username ? ALLOWED_SOUNDCLOUD_USERS.includes(username) : false;
+		const parsed = new URL(normalizeUrl(value));
+		return parsed.hostname === 'soundcloud.com' || parsed.hostname === 'm.soundcloud.com' || parsed.hostname.endsWith('.soundcloud.com');
 	} catch {
-		return false;
+		return /soundcloud\.com/i.test(value);
 	}
 }
 
@@ -92,7 +70,7 @@ async function createAudioStream(url) {
 		return await scdl.download(url);
 	}
 
-	throw new Error('Chỉ hỗ trợ link SoundCloud từ tài khoản được phép.');
+	throw new Error('Chỉ hỗ trợ link SoundCloud.');
 }
 
 const client = new Client({
@@ -265,7 +243,7 @@ client.on('messageCreate', async (message) => {
 		} else if (command === 'b!p' || command === 'b!play') {
 			const normalizedUrl = argument && normalizeUrl(argument);
 			if (!normalizedUrl || !isSupportedMusicUrl(normalizedUrl)) {
-				await message.reply(`Dùng: \`b!p <link SoundCloud của ${ALLOWED_SOUNDCLOUD_USERS.join(', ')} >\``);
+				await message.reply('Dùng: `b!p <link SoundCloud>`');
 				return;
 			}
 			await connectAndPlay(message, normalizedUrl);
