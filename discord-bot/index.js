@@ -44,7 +44,7 @@ const {
 } = require('discord.js');
 
 const {
-	AudioPlayerStatus,
+	StreamType,
 	createAudioPlayer,
 	createAudioResource,
 	joinVoiceChannel,
@@ -52,6 +52,7 @@ const {
 	VoiceConnectionStatus,
 	NoSubscriberBehavior,
 } = require('@discordjs/voice');
+const { spawn } = require('child_process');
 
 const PREFIX = 'b!';
 const guildSessions = new Map();
@@ -157,11 +158,25 @@ async function sayTextInVoice(message, text) {
 		}
 
 		const buffer = Buffer.from(await response.arrayBuffer());
-		const stream = Readable.from(buffer);
-		const resource = createAudioResource(stream, {
-			inputType: 'unknown',
+		const inputStream = Readable.from(buffer);
+		const ffmpeg = spawn(process.env.FFMPEG_PATH || require('ffmpeg-static'), [
+			'-i', 'pipe:0',
+			'-f', 's16le',
+			'-ar', '48000',
+			'-ac', '2',
+			'-',
+		], {
+			stdio: ['pipe', 'pipe', 'pipe'],
 		});
 
+		inputStream.pipe(ffmpeg.stdin);
+
+		const resource = createAudioResource(ffmpeg.stdout, {
+			inputType: StreamType.Raw,
+			inlineVolume: true,
+		});
+
+		resource.volume?.setVolume(1);
 		session.player.play(resource);
 		await message.reply(`Đang đọc: **${text}**`);
 
@@ -175,7 +190,7 @@ async function sayTextInVoice(message, text) {
 	}
 }
 
-client.once('ready', (readyClient) => {
+client.once('clientReady', (readyClient) => {
 	console.log(`Bot online: ${readyClient.user.tag}`);
 });
 
