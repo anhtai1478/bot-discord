@@ -27,13 +27,12 @@ const {
     AudioPlayerStatus,
     NoSubscriberBehavior,
     StreamType,
-    createAudioPlayer,
     createAudioResource,
     joinVoiceChannel,
     entersState,
     VoiceConnectionStatus,
 } = require('@discordjs/voice');
-const ytdlp = require('youtube-dl-exec');
+const ytdl = require('@distube/ytdl-core');
 
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
@@ -109,26 +108,20 @@ async function playNext(queue) {
         console.log('Đang lấy stream...');
         console.log('URL:', item.url);
 
-        // Tối ưu cờ yt-dlp để vượt qua kiểm tra IP trên server
-        const stream = ytdlp.exec(item.url, {
-            output: '-',
-            format: 'bestaudio[ext=webm]/bestaudio',
-            noPlaylist: true,
-            quiet: true,
-            noWarnings: true,
-            geoBypass: true,
-            addHeader: [
-                'referer:youtube.com',
-                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-            ]
-        }, { stdio: ['ignore', 'pipe', 'pipe'] });
-        
-        stream.stderr.on('data', (data) => console.error(`yt-dlp: ${data}`));
+        // Lấy stream trực tiếp từ ytdl-core
+        const stream = ytdl(item.url, {
+            filter: 'audioonly',
+            highWaterMark: 1 << 25,
+            dlChunkSize: 0,
+            quality: 'highestaudio',
+        });
+
         stream.on('error', (error) => queue.player.emit('error', error));
 
         console.log('Lấy stream thành công!');
 
-        const resource = createAudioResource(stream.stdout, {
+        // Truyền thẳng biến stream vào createAudioResource
+        const resource = createAudioResource(stream, {
             inputType: StreamType.Arbitrary,
             inlineVolume: true,
         });
@@ -226,7 +219,7 @@ async function joinVoiceRoom(message) {
     await message.reply(`Bot đã vào phòng **${voiceChannel.name}** và sẽ ở lại.`);
 }
 
-client.once('ready', (readyClient) => {
+client.once('clientReady', (readyClient) => {
     console.log(`Đã đăng nhập thành công với tên: ${readyClient.user.tag}`);
 });
 
