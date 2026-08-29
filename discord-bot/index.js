@@ -40,6 +40,8 @@ const {
 } = require('@discordjs/voice');
 
 const PREFIX = 'b!';
+const guildSessions = new Map();
+
 const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
@@ -58,6 +60,56 @@ function getVoiceConnection(guild, voiceChannel) {
 	});
 }
 
+async function joinVoiceRoom(message) {
+	const voiceChannel = message.member?.voice?.channel;
+	if (!voiceChannel) {
+		await message.reply('Bạn cần vào một kênh thoại trước khi gọi bot.');
+		return null;
+	}
+
+	const permissions = voiceChannel.permissionsFor(message.client.user);
+	if (!permissions?.has(PermissionsBitField.Flags.Connect) ||
+		!permissions.has(PermissionsBitField.Flags.Speak)) {
+		await message.reply('Bot cần quyền Connect và Speak trong kênh thoại này.');
+		return null;
+	}
+
+	let session = guildSessions.get(message.guildId);
+	if (session && session.connection.joinConfig.channelId !== voiceChannel.id) {
+		session.connection.destroy();
+		session = null;
+	}
+
+	if (!session) {
+		const player = createAudioPlayer({
+			behaviors: { noSubscriber: NoSubscriberBehavior.Pause },
+		});
+		const connection = getVoiceConnection(message.guild, voiceChannel);
+		connection.subscribe(player);
+		await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
+		const newSession = { connection, player };
+		guildSessions.set(message.guildId, newSession);
+		await message.reply(`Bot đã vào phòng **${voiceChannel.name}**.`);
+		return newSession;
+	}
+
+	await message.reply(`Bot đang ở trong phòng **${voiceChannel.name}**.`);
+	return session;
+}
+
+async function leaveVoiceRoom(message) {
+	const session = guildSessions.get(message.guildId);
+	if (!session) {
+		await message.reply('Bot chưa ở trong kênh thoại nào.');
+		return;
+	}
+
+	session.player.stop();
+	session.connection.destroy();
+	guildSessions.delete(message.guildId);
+	await message.reply('Đã rời khỏi kênh thoại.');
+}
+
 async function sayTextInVoice(message, text) {
 	const voiceChannel = message.member?.voice?.channel;
 	if (!voiceChannel) {
@@ -72,21 +124,11 @@ async function sayTextInVoice(message, text) {
 		return;
 	}
 
-	const player = createAudioPlayer({
-		behaviors: {
-			noSubscriber: NoSubscriberBehavior.Pause,
-		},
-	});
-
-	const connection = getVoiceConnection(message.guild, voiceChannel);
-	connection.subscribe(player);
-
-	try {
-		await entersState(connection, VoiceConnectionStatus.Ready, 15_000);
-	} catch (error) {
-		console.error('Voice connection error:', error);
-		await message.reply('Không thể kết nối vào kênh thoại.');
-		return;
+	let session = guildSessions.get(message.guildId);
+	if (!session || session.connection.joinConfig.channelId !== voiceChannel.id) {
+		const joined = await joinVoiceRoom(message);
+		if (!joined) return;
+		session = joined;
 	}
 
 	const audioUrl = googleTTS.getAudioUrl(text, {
@@ -106,20 +148,16 @@ async function sayTextInVoice(message, text) {
 			inputType: 'unknown',
 		});
 
-		player.play(resource);
+		session.player.play(resource);
 		await message.reply(`Đang đọc: **${text}**`);
 
 		await new Promise((resolve, reject) => {
-			player.once('idle', resolve);
-			player.once('error', reject);
+			session.player.once('idle', resolve);
+			session.player.once('error', reject);
 		});
 	} catch (error) {
 		console.error('TTS error:', error);
 		await message.reply('Không thể đọc giọng Google lúc này.');
-	} finally {
-		setTimeout(() => {
-			connection.destroy();
-		}, 1000);
 	}
 }
 
@@ -134,12 +172,18 @@ client.on('messageCreate', async (message) => {
 	const text = args.join(' ');
 
 	try {
-		if (command === 'b!say') {
+		if (command === 'b!join') {
+			await joinVoiceRoom(message);
+		} else if (command === 'b!leave') {
+			await leaveVoiceRoom(message);
+		} else if (command === 'b!say') {
 			if (!text) {
 				await message.reply('Dùng: `b!say Xin chào`');
 				return;
 			}
 			await sayTextInVoice(message, text);
+		} else if (command === 'b!help') {
+			await message.reply('Lệnh có sẵn:\n`b!join` - gọi bot vào phòng\n`b!say <nội dung>` - bot đọc văn bản bằng giọng Google\n`b!leave` - bot rời phòng');
 		}
 	} catch (error) {
 		console.error('Command error:', error);
