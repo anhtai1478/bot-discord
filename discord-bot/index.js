@@ -34,10 +34,15 @@ const {
 	VoiceConnectionStatus,
 } = require('@discordjs/voice');
 const ytdl = require('@distube/ytdl-core');
+const scdl = require('soundcloud-downloader').default;
 
 const PREFIX = 'b!';
 const IDLE_TIMEOUT = 24 * 60 * 60 * 1000;
 const queues = new Map();
+const ALLOWED_SOUNDCLOUD_USERS = (process.env.ALLOWED_SOUNDCLOUD_USERS || 'your_soundcloud_username')
+	.split(',')
+	.map((value) => value.trim().toLowerCase())
+	.filter(Boolean);
 
 // Bot phải ở lại trong room cho đến khi người dùng chủ động ra lệnh rời.
 // Do đó, không dùng logic tự động ngắt kết nối theo thời gian rảnh nữa.
@@ -45,17 +50,49 @@ const queues = new Map();
 function normalizeUrl(value) {
 	try {
 		const url = new URL(value);
-		if (url.hostname === 'youtu.be') {
-			return `https://www.youtube.com/watch?v=${url.pathname.slice(1)}`;
-		}
-		if (url.hostname.endsWith('youtube.com')) {
-			const videoId = url.searchParams.get('v') || url.pathname.match(/^\/(?:shorts\/|embed\/)?([^/?]+)/)?.[1];
-			if (videoId) return `https://www.youtube.com/watch?v=${videoId}`;
+		if (url.hostname === 'soundcloud.com' || url.hostname === 'm.soundcloud.com' || url.hostname.endsWith('.soundcloud.com')) {
+			return url.toString();
 		}
 		return value;
 	} catch {
 		return value;
 	}
+}
+
+function getSoundCloudUsernameFromUrl(value) {
+	try {
+		const url = new URL(value);
+		const host = url.hostname.toLowerCase();
+		if (!(host === 'soundcloud.com' || host === 'm.soundcloud.com' || host.endsWith('.soundcloud.com'))) {
+			return null;
+		}
+		const parts = url.pathname.split('/').filter(Boolean);
+		return parts[0]?.toLowerCase() || null;
+	} catch {
+		return null;
+	}
+}
+
+function isSupportedMusicUrl(value) {
+	if (!value) return false;
+	const url = normalizeUrl(value);
+	try {
+		const parsed = new URL(url);
+		const isSoundCloud = parsed.hostname === 'soundcloud.com' || parsed.hostname === 'm.soundcloud.com' || parsed.hostname.endsWith('.soundcloud.com');
+		if (!isSoundCloud) return false;
+		const username = getSoundCloudUsernameFromUrl(parsed.toString());
+		return username ? ALLOWED_SOUNDCLOUD_USERS.includes(username) : false;
+	} catch {
+		return false;
+	}
+}
+
+async function createAudioStream(url) {
+	if (/soundcloud\.com/i.test(url)) {
+		return await scdl.download(url);
+	}
+
+	throw new Error('Chỉ hỗ trợ link SoundCloud từ tài khoản được phép.');
 }
 
 const client = new Client({
@@ -109,13 +146,7 @@ async function playNext(queue) {
 		console.log('Đang lấy stream...');
 		console.log('URL:', item.url);
 
-		// Lấy stream trực tiếp từ ytdl-core
-		const stream = ytdl(item.url, {
-			filter: 'audioonly',
-			highWaterMark: 1 << 25,
-			dlChunkSize: 0,
-			quality: 'highestaudio',
-		});
+		const stream = await createAudioStream(item.url);
 
 		stream.on('error', (error) => queue.player.emit('error', error));
 
@@ -233,8 +264,8 @@ client.on('messageCreate', async (message) => {
 			await joinVoiceRoom(message);
 		} else if (command === 'b!p' || command === 'b!play') {
 			const normalizedUrl = argument && normalizeUrl(argument);
-			if (!normalizedUrl || !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i.test(normalizedUrl)) {
-				await message.reply('Dùng: `b!p <link YouTube>`');
+			if (!normalizedUrl || !isSupportedMusicUrl(normalizedUrl)) {
+				await message.reply(`Dùng: \`b!p <link SoundCloud của ${ALLOWED_SOUNDCLOUD_USERS.join(', ')} >\``);
 				return;
 			}
 			await connectAndPlay(message, normalizedUrl);
